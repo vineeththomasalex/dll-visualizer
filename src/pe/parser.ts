@@ -1023,51 +1023,44 @@ function extractVersionInfo(
   const start = leaf.fileOffset;
   const end = Math.min(start + (leaf.dataSize ?? 0), r.length);
   const out: Record<string, string> = {};
+  const align4 = (n: number) => (n + 3) & ~3;
 
-  // Fixed file info: locate the VS_FIXEDFILEINFO signature.
-  for (let p = start; p + 4 < end; p += 4) {
-    if (r.u32(p) === 0xfeef04bd) {
-      const fileVerMs = r.u32(p + 8);
-      const fileVerLs = r.u32(p + 12);
-      const prodVerMs = r.u32(p + 16);
-      const prodVerLs = r.u32(p + 20);
-      out['FileVersion (binary)'] = `${fileVerMs >>> 16}.${fileVerMs & 0xffff}.${fileVerLs >>> 16}.${fileVerLs & 0xffff}`;
-      out['ProductVersion (binary)'] = `${prodVerMs >>> 16}.${prodVerMs & 0xffff}.${prodVerLs >>> 16}.${prodVerLs & 0xffff}`;
-      break;
-    }
-  }
-
-  // StringFileInfo key/value pairs: scan for UTF-16 pairs.
-  const wanted = [
-    'CompanyName',
-    'FileDescription',
-    'FileVersion',
-    'InternalName',
-    'LegalCopyright',
-    'OriginalFilename',
-    'ProductName',
-    'ProductVersion',
-    'Comments',
-  ];
-  let p = start;
-  while (p + 6 < end) {
+  /** Recursive walk of the VS_VERSIONINFO node tree. */
+  const node = (p: number, limit: number, depth: number) => {
+    if (depth > 4 || p + 6 > limit) return;
     const wLength = r.u16(p);
     const wValueLength = r.u16(p + 2);
     const wType = r.u16(p + 4);
-    if (wLength < 6 || p + wLength > end) {
-      p += 2;
-      continue;
+    if (wLength < 6 || p + wLength > limit) return;
+    const nodeEnd = p + wLength;
+    const key = r.wstr(p + 6, 256);
+    let q = align4(p + 6 + (key.length + 1) * 2);
+
+    if (wValueLength) {
+      if (wType === 1) {
+        const value = r.wstr(q, wValueLength + 1);
+        if (value) out[key] = value;
+      } else if (key === 'VS_VERSION_INFO' && r.canRead(24, q) && r.u32(q) === 0xfeef04bd) {
+        const fileVerMs = r.u32(q + 8);
+        const fileVerLs = r.u32(q + 12);
+        const prodVerMs = r.u32(q + 16);
+        const prodVerLs = r.u32(q + 20);
+        out['FileVersion (binary)'] = `${fileVerMs >>> 16}.${fileVerMs & 0xffff}.${fileVerLs >>> 16}.${fileVerLs & 0xffff}`;
+        out['ProductVersion (binary)'] = `${prodVerMs >>> 16}.${prodVerMs & 0xffff}.${prodVerLs >>> 16}.${prodVerLs & 0xffff}`;
+      }
+      q += wType === 1 ? wValueLength * 2 : wValueLength;
     }
-    const key = r.wstr(p + 6, 128);
-    if (wType === 1 && wValueLength > 0 && wanted.includes(key)) {
-      let vp = p + 6 + (key.length + 1) * 2;
-      vp = (vp + 3) & ~3;
-      const val = r.wstr(vp, wValueLength + 1);
-      if (val) out[key] = val;
+    q = align4(q);
+    let guard = 0;
+    while (q + 6 <= nodeEnd && guard++ < 512) {
+      const childLen = r.u16(q);
+      if (childLen < 6) break;
+      node(q, nodeEnd, depth + 1);
+      q = align4(q + childLen);
     }
-    p += (wLength + 3) & ~3;
-    if (wLength === 0) break;
-  }
+  };
+
+  node(start, end, 0);
   return Object.keys(out).length ? out : undefined;
 }
 

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import type { ImportModule, PEImage, ResourceNode } from '../pe/types';
 import { formatSize, hexBig } from '../pe/reader';
 import { Empty, Panel, Search } from './ui';
-import type { Symbol } from '../symbols/pdb';
+import type { PdbInfo, Symbol } from '../symbols/pdb';
 import { RESOURCE_TYPE } from '../pe/constants';
 
 /* ------------------------------------------------------------------ imports */
@@ -254,7 +254,7 @@ export function Resources({ pe }: { pe: PEImage }) {
       <Panel title="Resource tree">
         <div className="tree">
           {pe.resources.children?.map((c, i) => (
-            <TreeNode key={i} node={c} pe={pe} depth={0} />
+                <TreeNode key={i} node={c} depth={0} />
           ))}
         </div>
       </Panel>
@@ -262,12 +262,14 @@ export function Resources({ pe }: { pe: PEImage }) {
   );
 }
 
-function TreeNode({ node, pe, depth }: { node: ResourceNode; pe: PEImage; depth: number }) {
+function TreeNode({ node, depth }: { node: ResourceNode; depth: number }) {
   const [open, setOpen] = useState(depth < 1);
   const hasKids = !!node.children?.length;
   const label =
     depth === 0
-      ? (node.typeName ?? RESOURCE_TYPE[Number(node.id)] ?? `Type ${node.id}`)
+      ? typeof node.id === 'string'
+        ? node.id
+        : (node.typeName ?? RESOURCE_TYPE[Number(node.id)] ?? `Type ${node.id}`)
       : depth === 1
         ? `#${node.name}`
         : `lang ${node.name}`;
@@ -288,7 +290,7 @@ function TreeNode({ node, pe, depth }: { node: ResourceNode; pe: PEImage; depth:
       {open && hasKids && (
         <div className="kids">
           {node.children!.map((c, i) => (
-            <TreeNode key={i} node={c} pe={pe} depth={depth + 1} />
+            <TreeNode key={i} node={c} depth={depth + 1} />
           ))}
         </div>
       )}
@@ -300,10 +302,12 @@ function TreeNode({ node, pe, depth }: { node: ResourceNode; pe: PEImage; depth:
 export function Symbols({
   pe,
   symbols,
+  pdb,
   onDropHint,
 }: {
   pe: PEImage;
   symbols: Symbol[];
+  pdb: PdbInfo | null;
   onDropHint: () => void;
 }) {
   const [q, setQ] = useState('');
@@ -315,10 +319,39 @@ export function Symbols({
       <>
         <h2 className="section-title">Symbols</h2>
         <p className="section-sub">
-          No symbol file loaded yet. Drop the matching <code>.pdb</code> or linker <code>.map</code> next to the DLL and
-          every address in this app gets a real name.
+          {pdb
+            ? 'The PDB loaded, but it carries no public or procedure symbol records. Managed (.NET) assemblies keep their names in CLI metadata rather than in the PDB symbol streams, so this is expected for IL-only images.'
+            : 'No symbol file loaded yet. Drop the matching .pdb or linker .map next to the DLL and every address in this app gets a real name.'}
         </p>
-        {cv?.pdbPath && (
+        {pdb && (
+          <div className="stat-grid">
+            <div className="stat">
+              <div className="k">PDB GUID</div>
+              <div className="v sm">{pdb.guid}</div>
+            </div>
+            <div className="stat">
+              <div className="k">Age</div>
+              <div className="v sm">{pdb.age}</div>
+            </div>
+            <div className="stat">
+              <div className="k">MSF block size</div>
+              <div className="v sm">{pdb.blockSize} B</div>
+            </div>
+            <div className="stat">
+              <div className="k">Streams</div>
+              <div className="v sm">{pdb.streamCount}</div>
+            </div>
+            <div className="stat">
+              <div className="k">Compilands</div>
+              <div className="v sm">{pdb.modules.length}</div>
+            </div>
+            <div className="stat">
+              <div className="k">Matches image</div>
+              <div className="v sm">{cv?.guid === pdb.guid && cv?.age === pdb.age ? 'yes' : 'no'}</div>
+            </div>
+          </div>
+        )}
+        {cv?.pdbPath && !pdb && (
           <div className="banner info">
             <span>ℹ</span>
             <div>
@@ -328,7 +361,29 @@ export function Symbols({
             </div>
           </div>
         )}
-        <button className="btn primary" onClick={onDropHint}>
+        {pdb && pdb.modules.length > 0 && (
+          <Panel title="Compilands in the PDB" sub={`${pdb.modules.length} object files`} tight>
+            <table className="grid">
+              <thead>
+                <tr>
+                  <th>Module</th>
+                  <th>Object file</th>
+                  <th className="num">Symbol bytes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pdb.modules.slice(0, 500).map((m, i) => (
+                  <tr key={i}>
+                    <td className="mono">{m.name}</td>
+                    <td className="mono faint">{m.objectFile}</td>
+                    <td className="num faint">{m.symbolBytes.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Panel>
+        )}
+        <button className="btn primary" onClick={onDropHint} style={{ marginTop: 12 }}>
           Add a symbol file
         </button>
       </>
@@ -392,3 +447,4 @@ export function Symbols({
     </>
   );
 }
+

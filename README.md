@@ -1,32 +1,97 @@
-# React + TypeScript + Vite
+# DLL Visualizer
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+**[Try it live →](https://vineeththomasalex.github.io/dll-visualizer/)**
 
-Currently, two official plugins are available:
+See inside a Windows binary. Drop a `.dll`, `.exe` or `.sys` and get the exact layout the Windows
+loader will build in memory — colour-coded sections, every header field explained, imports and
+exports grouped by what they actually do, the resource tree, and a live disassembly.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Everything runs in your browser. No upload, no server, no telemetry.
 
-## React Compiler
+![DLL Visualizer](screenshot.png)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## What it does
 
-## Expanding the Oxlint configuration
+**Memory map** — the image rendered as a single proportional block. Each section is a band sized by
+its virtual footprint, with data-directory tables painted on top as striped overlays. Toggle between
+the *virtual* layout (what the loader builds) and the *file* layout (what is on disk) to see exactly
+where alignment padding, the Authenticode signature and any overlay data live. Recolour by content,
+page permissions, or byte entropy, and filter to just the executable, writable, discardable or
+zero-filled regions.
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+**Explained headers** — every field of the DOS header, Rich header, COFF header, optional header,
+all 16 data directories, the load config, the debug directory, TLS and the certificate table, each
+with its file offset, decoded value, and a plain-English note on what the loader does with it.
+Characteristics and DllCharacteristics are broken out bit by bit.
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+**Imports & exports** — imports grouped by module *and* by purpose (file I/O, registry, networking,
+crypto, process control, ETW, NT native API…), with the IAT slot for every function. Exports show
+the ordinal, RVA, and any forwarder strings. Delay-loaded modules are flagged.
+
+**Resources** — the full three-level type → name → language tree, plus a properly parsed
+`VS_VERSIONINFO` block.
+
+**Symbols** — drop the matching `.pdb` and the app parses the MSF container, the DBI stream and the
+public symbol records directly in the browser, then checks the PDB's GUID and age against the
+image's debug directory so you know the symbols really belong to this build. Linker `.map` files
+work too.
+
+**Disassembly** — Capstone compiled to WebAssembly, lazily loaded, seeded from the entry point, TLS
+callbacks, exports and your PDB symbols. Branch targets are annotated with matching names and are
+clickable to follow.
+
+**Security posture** — ASLR, DEP, CFG, SafeSEH, high-entropy VA, signing, and W+X detection, with
+the risky combinations called out rather than just listed.
+
+**Hex** — a virtualised hex view where offset colours match the file-layout map, so you always know
+which structure you are standing in.
+
+## Supported formats
+
+PE32 and PE32+ for x86, x64, ARM and ARM64, including .NET assemblies (the COR20 header and CLI
+metadata streams are decoded). Disassembly is available for x86, x64, ARM and ARM64 images.
+
+## Running locally
+
+```bash
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Then open http://localhost:5173/dll-visualizer/.
+
+```bash
+npm run build     # type-check + production build into dist/
+npm run lint      # eslint
+npm test          # playwright end-to-end tests
+npm run deploy    # publish dist/ to the gh-pages branch
+```
+
+### Test fixtures
+
+`npm run fixtures` builds a small native DLL (with its PDB and MAP) using MSVC and copies a system
+DLL into `tests/fixtures/`. That folder is git-ignored — no Windows system binaries are committed to this repository. The end-to-end tests skip themselves if the fixtures are missing.
+
+## How it works
+
+| Piece | Where |
+| --- | --- |
+| PE / PE32+ parser | `src/pe/parser.ts` |
+| Entropy analysis | `src/pe/entropy.ts` |
+| PDB (MSF) + MAP readers | `src/symbols/pdb.ts` |
+| Capstone wrapper | `src/disasm/disasm.ts` |
+| Explanations shown in the app | `src/knowledge/glossary.ts` |
+
+The PE parser is written from scratch against the PE/COFF specification — no binary-parsing
+dependency. It is defensive throughout: every directory is parsed inside a guard that records a
+warning instead of throwing, so a truncated or deliberately malformed image still renders as much as
+it can.
+
+## Built with
+
+React 19 · TypeScript · Vite · [capstone-wasm](https://github.com/CzBiX/disasm-web) · Playwright
+
+## Licence
+
+MIT
+

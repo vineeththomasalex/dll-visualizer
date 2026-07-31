@@ -9,3 +9,4 @@ playwright-report
 .vscode/*
 !.vscode/extensions.json
 tests/fixtures/
+.playwright-mcp/

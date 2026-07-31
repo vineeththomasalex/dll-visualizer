@@ -177,7 +177,7 @@ export function MemoryMap({ pe, symbols, layout, setLayout, highlight, setHighli
                             onSelect(k.id, k);
                           }}
                         >
-                          {px >= 13 && pxOf(b.size) >= 34 && (
+                          {px >= 16 && pxOf(b.size) >= 48 && (
                             <span
                               style={{
                                 position: 'absolute',

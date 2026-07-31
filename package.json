@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "test": "playwright test",
+    "deploy": "npm run build && npx gh-pages -d dist --dotfiles",
+    "fixtures": "powershell -ExecutionPolicy Bypass -File scripts/make-fixtures.ps1",
+    "preview": "vite preview --port 4173 --strictPort"
   },
   "dependencies": {
     "capstone-wasm": "^1.0.3",

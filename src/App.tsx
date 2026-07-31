@@ -286,7 +286,9 @@ export default function App() {
               {tab === 'imports' && <Imports pe={pe} />}
               {tab === 'exports' && <Exports pe={pe} symbols={symbols} />}
               {tab === 'resources' && <Resources pe={pe} />}
-              {tab === 'symbols' && <Symbols pe={pe} symbols={symbols} onDropHint={() => fileInput.current?.click()} />}
+              {tab === 'symbols' && (
+                <Symbols pe={pe} symbols={symbols} pdb={pdb} onDropHint={() => fileInput.current?.click()} />
+              )}
               {tab === 'disasm' && <DisasmView pe={pe} symbols={symbols} />}
               {tab === 'hex' && <HexView pe={pe} />}
             </div>

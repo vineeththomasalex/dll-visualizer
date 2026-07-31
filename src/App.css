@@ -900,13 +900,16 @@ select.mini,
   font-family: var(--mono);
   font-size: 12.5px;
   line-height: 1.6;
+  width: max-content;
+  min-width: 100%;
 }
 .ins {
   display: grid;
-  grid-template-columns: 130px 190px 70px 1fr;
+  grid-template-columns: 132px 172px 76px minmax(0, 1fr);
   gap: 12px;
   padding: 1px 10px;
   border-radius: 3px;
+  white-space: nowrap;
 }
 .ins:hover {
   background: var(--bg-2);
