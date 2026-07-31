@@ -13,6 +13,7 @@ const TAB_TOPIC: Record<string, string> = {
   symbols: 'symbols',
   disasm: 'disasm',
   hex: 'rva',
+  compare: 'compare',
 };
 
 export function LearnSidebar({

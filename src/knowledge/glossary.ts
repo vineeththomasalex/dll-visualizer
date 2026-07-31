@@ -170,6 +170,20 @@ export const TOPICS: Record<string, Topic> = {
       'ILONLY means there is no native code at all, so the same file runs on any architecture.',
     ],
   },
+  compare: {
+    id: 'compare',
+    title: 'Comparing two builds',
+    body: 'Two versions of the same module are rarely different everywhere. The comparison pins down exactly what moved: the layout, the content of each section, the dependency list, the exported API, the resources, and the security flags.',
+    bullets: [
+      'Both images are drawn to one shared byte scale, so a taller column really is a bigger image.',
+      'Matched sections are joined by ribbons — a slope means everything after that point shifted address.',
+      'Similarity compares each matched section in 512-byte blocks, so you can tell a targeted patch from a full rebuild.',
+      'A removed export is a hard breaking change; a changed ordinal is a silent one.',
+      'Mitigations that were switched off between builds are flagged as a regression.',
+      'The PDB GUID always differs between builds — it identifies one exact image, not a version.',
+    ],
+    seeAlso: ['security', 'exports'],
+  },
   overlay: {
     id: 'overlay',
     title: 'Overlay data',

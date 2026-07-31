@@ -8,6 +8,8 @@ const systemDll = path.join(fixtures, 'shlwapi.dll');
 const demoDll = path.join(fixtures, 'demo.dll');
 const demoPdb = path.join(fixtures, 'demo.pdb');
 const demoMap = path.join(fixtures, 'demo.map');
+const demoV1 = path.join(fixtures, 'demo_v1.dll');
+const demoV2 = path.join(fixtures, 'demo_v2.dll');
 
 async function load(page: Page, files: string[]) {
   await page.goto('/');
@@ -109,6 +111,58 @@ test.describe('native DLL with symbols', () => {
     await load(page, [demoDll, demoMap]);
     await tab(page, 'Symbols').click();
     await expect(page.locator('table.grid')).toContainText('AddNumbers');
+  });
+});
+
+test.describe('compare', () => {
+  test.skip(!existsSync(demoDll) || !existsSync(demoV2), 'run `npm run fixtures` first (needs MSVC)');
+
+  test('diffs two builds of the same DLL', async ({ page }) => {
+    await load(page, [demoDll]);
+    await tab(page, 'Compare').click();
+
+    // Empty state first.
+    await expect(page.locator('.view .dropzone')).toContainText('Drop the other version');
+    await page.setInputFiles('.view .dropzone input[type=file]', demoV2);
+
+    // Headline narrative picks up the real differences between v1 and v2.
+    const banner = page.locator('.view .banner').first();
+    await expect(banner).toContainText('WININET.dll');
+    await expect(banner).toContainText('exports added');
+
+    // Visual layout comparison: two ribbons plus connectors between matched sections.
+    await expect(page.locator('.ribbon')).toHaveCount(2);
+    expect(await page.locator('.connectors path').count()).toBeGreaterThan(3);
+
+    // Section table and API churn.
+    const sectionPanel = page.locator('.panel', { hasText: 'Section-by-section' });
+    await expect(sectionPanel).toContainText('.text');
+    await expect(sectionPanel.locator('td.mono')).toContainText(['.text']);
+
+    const apiPanel = page.locator('.panel', { hasText: 'Exported API' });
+    await expect(apiPanel).toContainText('WobbleWidget');
+    await expect(apiPanel).toContainText('FetchSomething');
+
+    // Dependency churn lists the newly required module.
+    await expect(page.locator('.panel', { hasText: 'Dependencies' })).toContainText('WININET.dll');
+  });
+
+  test('reports identical images as identical', async ({ page }) => {
+    await load(page, [demoDll]);
+    await tab(page, 'Compare').click();
+    await page.setInputFiles('.view .dropzone input[type=file]', demoV1);
+    await expect(page.locator('.view .banner').first()).toContainText('100%');
+    await expect(page.locator('.panel', { hasText: 'Byte-level similarity' })).toContainText('100.0%');
+  });
+
+  test('swaps the baseline', async ({ page }) => {
+    await load(page, [demoDll]);
+    await tab(page, 'Compare').click();
+    await page.setInputFiles('.view .dropzone input[type=file]', demoV2);
+    await expect(page.locator('.cmp-head')).toContainText('demo_v2.dll');
+    await page.locator('.cmp-head button:has-text("Swap")').click();
+    // After swapping, the topbar chip shows the former comparison target.
+    await expect(page.locator('.topbar .file-chip').first()).toContainText('demo_v2.dll');
   });
 });
 

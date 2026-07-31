@@ -7,13 +7,26 @@ import { Overview } from './components/Overview';
 import { Exports, Imports, Resources, Symbols } from './components/Tables';
 import { HexView } from './components/HexView';
 import { DisasmView } from './components/DisasmView';
+import { CompareView } from './components/CompareView';
 import { LearnSidebar } from './components/LearnSidebar';
 import { parsePE, PEParseError } from './pe/parser';
 import type { MemoryRegion, PEImage } from './pe/types';
 import { parseMapFile, parsePdb, type PdbInfo, type Symbol } from './symbols/pdb';
 import { SECTION_TOPIC_HINTS } from './knowledge/glossary';
 
-type TabId = 'overview' | 'map' | 'headers' | 'imports' | 'exports' | 'resources' | 'symbols' | 'disasm' | 'hex';
+type TabId =
+  | 'overview'
+  | 'map'
+  | 'headers'
+  | 'imports'
+  | 'exports'
+  | 'resources'
+  | 'symbols'
+  | 'disasm'
+  | 'hex'
+  | 'compare';
+
+const BINARY_RE = /\.(dll|exe|sys|ocx|cpl|drv|efi|node|scr|mui|tlb|winmd)$/i;
 
 const readFile = (f: File) =>
   new Promise<Uint8Array>((resolve, reject) => {
@@ -25,6 +38,7 @@ const readFile = (f: File) =>
 
 export default function App() {
   const [pe, setPe] = useState<PEImage | null>(null);
+  const [compare, setCompare] = useState<PEImage | null>(null);
   const [pdb, setPdb] = useState<PdbInfo | null>(null);
   const [symbols, setSymbols] = useState<Symbol[]>([]);
   const [symbolFile, setSymbolFile] = useState<{ name: string; kind: 'pdb' | 'map' } | null>(null);
@@ -50,7 +64,7 @@ export default function App() {
       setError(null);
       try {
         let image = pe;
-        const binary = files.find((f) => /\.(dll|exe|sys|ocx|cpl|drv|efi|node|scr|mui|tlb|winmd)$/i.test(f.name));
+        const binary = files.find((f) => BINARY_RE.test(f.name));
         if (binary) {
           const bytes = await readFile(binary);
           image = parsePE(bytes, binary.name);
@@ -58,6 +72,7 @@ export default function App() {
           setSymbols([]);
           setPdb(null);
           setSymbolFile(null);
+          setCompare(null);
           setSelected(null);
           setSelectedRegion(null);
           setTab('overview');
@@ -99,13 +114,36 @@ export default function App() {
     [pe],
   );
 
+  const loadCompare = useCallback(async (files: File[]) => {
+    const binary = files.find((f) => BINARY_RE.test(f.name)) ?? files[0];
+    if (!binary) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const bytes = await readFile(binary);
+      setCompare(parsePE(bytes, binary.name));
+    } catch (e) {
+      setError(e instanceof PEParseError ? e.message : `${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
   useEffect(() => {
     const prevent = (e: DragEvent) => {
       e.preventDefault();
     };
     const drop = (e: DragEvent) => {
       e.preventDefault();
-      if (e.dataTransfer?.files.length) void handleFiles(Array.from(e.dataTransfer.files));
+      if (!e.dataTransfer?.files.length) return;
+      const files = Array.from(e.dataTransfer.files);
+      // While the Compare tab is open a dropped binary becomes the comparison target
+      // instead of replacing the image you are already looking at.
+      if (tab === 'compare' && pe && files.some((f) => BINARY_RE.test(f.name))) {
+        void loadCompare(files);
+      } else {
+        void handleFiles(files);
+      }
     };
     window.addEventListener('dragover', prevent);
     window.addEventListener('drop', drop);
@@ -113,7 +151,7 @@ export default function App() {
       window.removeEventListener('dragover', prevent);
       window.removeEventListener('drop', drop);
     };
-  }, [handleFiles]);
+  }, [handleFiles, loadCompare, tab, pe]);
 
   const contextTopic = useMemo(() => {
     if (tab !== 'map' || !selectedRegion || !pe) return null;
@@ -141,6 +179,7 @@ export default function App() {
         { id: 'symbols', label: 'Symbols', count: symbols.length || undefined },
         { id: 'disasm', label: 'Disassembly' },
         { id: 'hex', label: 'Hex' },
+        { id: 'compare', label: 'Compare with…' },
       ]
     : [];
 
@@ -192,6 +231,7 @@ export default function App() {
               className="btn"
               onClick={() => {
                 setPe(null);
+                setCompare(null);
                 setSymbols([]);
                 setPdb(null);
                 setSymbolFile(null);
@@ -291,6 +331,26 @@ export default function App() {
               )}
               {tab === 'disasm' && <DisasmView pe={pe} symbols={symbols} />}
               {tab === 'hex' && <HexView pe={pe} />}
+              {tab === 'compare' && (
+                <CompareView
+                  pe={pe}
+                  other={compare}
+                  busy={busy}
+                  onPick={(f) => void loadCompare(f)}
+                  onClear={() => setCompare(null)}
+                  onSwap={() => {
+                    if (!compare) return;
+                    const a = pe;
+                    setPe(compare);
+                    setCompare(a);
+                    setSymbols([]);
+                    setPdb(null);
+                    setSymbolFile(null);
+                    setSelected(null);
+                    setSelectedRegion(null);
+                  }}
+                />
+              )}
             </div>
           )}
         </div>

@@ -46,6 +46,17 @@ the risky combinations called out rather than just listed.
 **Hex** — a virtualised hex view where offset colours match the file-layout map, so you always know
 which structure you are standing in.
 
+**Compare with…** — add a second build of the same DLL and get a single scrollable diff. Both images
+are drawn to one shared byte scale with matched sections joined by ribbons, so growth and address
+shift are immediately visible. Alongside it: a plain-English summary of what changed, per-section
+size deltas and byte-level similarity (each matched section compared in 512-byte blocks), stacked
+entropy profiles showing *where inside* a section the bytes moved, metadata and version-resource
+diffs, data-directory drift, dependency churn (modules and individual functions gained or dropped),
+exported-API changes with breaking-change warnings for removed exports and changed ordinals,
+resource diffs, and a regression flag if any security mitigation was switched off between builds.
+
+![Comparing two builds](screenshot-compare.png)
+
 ## Supported formats
 
 PE32 and PE32+ for x86, x64, ARM and ARM64, including .NET assemblies (the COR20 header and CLI
@@ -69,14 +80,15 @@ npm run deploy    # publish dist/ to the gh-pages branch
 
 ### Test fixtures
 
-`npm run fixtures` builds a small native DLL (with its PDB and MAP) using MSVC and copies a system
-DLL into `tests/fixtures/`. That folder is git-ignored — no Windows system binaries are committed to this repository. The end-to-end tests skip themselves if the fixtures are missing.
+`npm run fixtures` builds a small native DLL in two flavours (`demo.dll` and `demo_v2.dll`, with
+their PDBs and MAPs) using MSVC and copies a system DLL into `tests/fixtures/`. That folder is git-ignored — no Windows system binaries are committed to this repository. The end-to-end tests skip themselves if the fixtures are missing.
 
 ## How it works
 
 | Piece | Where |
 | --- | --- |
 | PE / PE32+ parser | `src/pe/parser.ts` |
+| Build-to-build diff engine | `src/pe/diff.ts` |
 | Entropy analysis | `src/pe/entropy.ts` |
 | PDB (MSF) + MAP readers | `src/symbols/pdb.ts` |
 | Capstone wrapper | `src/disasm/disasm.ts` |
