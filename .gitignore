@@ -1,0 +1,12 @@
+node_modules
+dist
+dist-ssr
+test-results
+playwright-report
+*.local
+.DS_Store
+*.log
+.vscode/*
+!.vscode/extensions.json
+tests/fixtures/
+.playwright-mcp/
