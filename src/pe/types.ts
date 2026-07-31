@@ -229,4 +229,6 @@ export interface PEImage {
   hasSEH: boolean;
   hasAuthenticode: boolean;
   isDotNet: boolean;
+  /** True when the TimeDateStamp is a deterministic-build content hash, not a date. */
+  reproducibleBuild: boolean;
 }

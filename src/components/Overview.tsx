@@ -54,7 +54,17 @@ export function Overview({
         <Stat k="Resources" v={String(pe.resourceCount)} small />
         <Stat k="Executable code" v={formatSize(codeBytes)} small />
         <Stat k="Overall entropy" v={`${pe.entropy.toFixed(2)} / 8`} small />
-        <Stat k="Linked" v={pe.timeDateStamp ? new Date(pe.timeDateStamp * 1000).toISOString().slice(0, 10) : '—'} small />
+        <Stat
+          k="Linked"
+          v={
+            pe.reproducibleBuild
+              ? 'reproducible'
+              : pe.timeDateStamp
+                ? new Date(pe.timeDateStamp * 1000).toISOString().slice(0, 10)
+                : '—'
+          }
+          small
+        />
         <Stat k="Symbols loaded" v={symbols.length ? symbols.length.toLocaleString() : '—'} small />
       </div>
 
@@ -79,7 +89,16 @@ export function Overview({
         <Panel title="Build provenance">
           <div className="fields" style={{ margin: -14 }}>
             <Row k="Linker version" v={pe.groups.find((g) => g.id === 'optional')?.fields.find((f) => f.name === 'LinkerVersion')?.value ?? '—'} />
-            <Row k="Timestamp" v={pe.timeDateStamp ? `${new Date(pe.timeDateStamp * 1000).toUTCString()}` : 'not set'} />
+            <Row
+              k="Timestamp"
+              v={
+                pe.reproducibleBuild
+                  ? `${hexBig(pe.timeDateStamp)} — deterministic build hash, not a date`
+                  : pe.timeDateStamp
+                    ? new Date(pe.timeDateStamp * 1000).toUTCString()
+                    : 'not set'
+              }
+            />
             <Row k="CheckSum" v={`${hexBig(pe.checksum)} ${pe.checksum === pe.computedChecksum ? '(valid)' : pe.checksum === 0 ? '(not set)' : '(mismatch)'}`} />
             {cv && <Row k="PDB" v={cv.pdbPath ?? '—'} />}
             {cv?.guid && <Row k="PDB GUID" v={`${cv.guid} (age ${cv.age})`} />}

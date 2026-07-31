@@ -61,6 +61,8 @@ export function MemoryMap({ pe, symbols, layout, setLayout, highlight, setHighli
   // A gentle power curve keeps tiny sections visible without lying about big ones.
   const weight = (n: number) => Math.pow(Math.max(n, 1) / total, 0.62);
   const height = 560 * zoom;
+  const totalWeight = bands.reduce((a, b) => a + weight(b.size), 0) || 1;
+  const pxOf = (n: number) => Math.max(n === 0 ? 8 : 16, (weight(n) / totalWeight) * height);
 
   const selectedRegion = all.find((r) => r.id === selected) ?? null;
 
@@ -125,9 +127,11 @@ export function MemoryMap({ pe, symbols, layout, setLayout, highlight, setHighli
             <div className="addr-col" style={{ display: 'flex', flexDirection: 'column' }}>
               {bands.map((b) => (
                 <div key={b.id} style={{ flex: `${weight(b.size)} 1 0`, minHeight: 14, position: 'relative' }}>
-                  <span style={{ position: 'absolute', top: 0, right: 8 }}>
-                    {layout === 'virtual' ? hexBig(pe.imageBase + b.start, pe.is64 ? 12 : 8) : hexBig(b.start)}
-                  </span>
+                  {pxOf(b.size) >= 15 && (
+                    <span style={{ position: 'absolute', top: 0, right: 8 }}>
+                      {layout === 'virtual' ? hexBig(pe.imageBase + b.start, pe.is64 ? 12 : 8) : hexBig(b.start)}
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
@@ -154,6 +158,7 @@ export function MemoryMap({ pe, symbols, layout, setLayout, highlight, setHighli
                       const top = ((k.start - b.start) / Math.max(b.size, 1)) * 100;
                       const h = (k.size / Math.max(b.size, 1)) * 100;
                       if (top < -1 || top > 101) return null;
+                      const px = (k.size / Math.max(b.size, 1)) * pxOf(b.size);
                       return (
                         <div
                           key={k.id}
@@ -171,7 +176,28 @@ export function MemoryMap({ pe, symbols, layout, setLayout, highlight, setHighli
                             e.stopPropagation();
                             onSelect(k.id, k);
                           }}
-                        />
+                        >
+                          {px >= 13 && pxOf(b.size) >= 34 && (
+                            <span
+                              style={{
+                                position: 'absolute',
+                                left: 0,
+                                right: 0,
+                                top: '50%',
+                                transform: 'translateY(-50%)',
+                                textAlign: 'center',
+                                fontSize: 10,
+                                fontFamily: 'var(--mono)',
+                                color: '#05070d',
+                                fontWeight: 600,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                              }}
+                            >
+                              {k.label}
+                            </span>
+                          )}
+                        </div>
                       );
                     })}
                     <div className="label">

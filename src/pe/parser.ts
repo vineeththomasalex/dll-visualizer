@@ -735,6 +735,18 @@ export function parsePE(bytes: Uint8Array, fileName: string): PEImage {
   // ---------------- Version info ----------------
   const versionInfo = resources ? extractVersionInfo(r, resources, rvaToOffset) : undefined;
 
+  // A deterministic build stores a content hash in TimeDateStamp rather than a date.
+  const reproducibleBuild =
+    debug.some((d) => d.type === 16) || timeDateStamp > Math.floor(Date.now() / 1000) + 86400;
+  if (reproducibleBuild) {
+    const f = groups.find((g) => g.id === 'coff')?.fields.find((x) => x.name === 'TimeDateStamp');
+    if (f) {
+      f.value = `${hex(timeDateStamp)} — deterministic build hash, not a date`;
+      f.desc =
+        'This image was built reproducibly, so the linker replaced the link time with a hash of the build inputs. Two identical builds produce identical files.';
+    }
+  }
+
   // ---------------- Regions ----------------
   const memoryRegions = buildMemoryRegions(sections, sizeOfHeaders, sizeOfImage, sectionAlignment, dataDirectories);
   const fileRegions = buildFileRegions(sections, sizeOfHeaders, bytes.length, certDir);
@@ -802,6 +814,7 @@ export function parsePE(bytes: Uint8Array, fileName: string): PEImage {
     hasSEH: (dllCharacteristics & 0x0400) === 0,
     hasAuthenticode: certificates.length > 0,
     isDotNet: !!clr,
+    reproducibleBuild,
   };
 }
 
@@ -887,7 +900,14 @@ const API_GROUPS: { re: RegExp; label: string }[] = [
   { re: /^(CreateWindow|ShowWindow|MessageBox|DefWindowProc|RegisterClass|GetMessage|DispatchMessage|SetWindowPos|InvalidateRect|BeginPaint)/i, label: 'UI & Windowing' },
   { re: /^(CoInitialize|CoCreateInstance|CoTaskMem|SysAllocString|VariantInit|IID_|CLSID_|OleInitialize)/i, label: 'COM & OLE' },
   { re: /^(_|\?\?|std@@|memcpy|memset|strlen|strcpy|sprintf|printf|wcs|mbs|qsort|atoi|_amsg|__C_specific)/, label: 'C/C++ Runtime' },
-  { re: /^(GetLastError|SetLastError|FormatMessage|OutputDebugString|RaiseException|IsDebuggerPresent|SetUnhandledException|GetSystemTime|QueryPerformance|GetTickCount)/i, label: 'Diagnostics & Time' },
+  { re: /^(Etw|Trace|EventRegister|EventWrite|EventActivity|TraceMessage|McGenEventRegister)/i, label: 'ETW & Tracing' },
+  { re: /^(Nt|Zw)[A-Z]/, label: 'NT Native API' },
+  { re: /^Rtl[A-Z]/, label: 'RTL Runtime Library' },
+  { re: /^(Ldr)[A-Z]/, label: 'Loader Internals' },
+  { re: /^(InitializeCriticalSection|EnterCriticalSection|LeaveCriticalSection|DeleteCriticalSection|Interlocked|CreateEvent|SetEvent|ResetEvent|CreateMutex|ReleaseMutex|CreateSemaphore|InitOnce|SRWLock|ConditionVariable|Sleep(Ex|ConditionVariable))/i, label: 'Synchronisation' },
+  { re: /^(Get|Set)(Environment|CommandLine|SystemDirectory|WindowsDirectory|ComputerName|LocaleInfo|VersionEx|SystemInfo|NativeSystemInfo)/i, label: 'Environment & System Info' },
+  { re: /^(MultiByteToWideChar|WideCharToMultiByte|CompareString|LCMapString|GetStringType|IsCharAlpha|CharUpper|CharLower|lstr)/i, label: 'Text & Locale' },
+  { re: /^(GetLastError|SetLastError|FormatMessage|OutputDebugString|RaiseException|IsDebuggerPresent|SetUnhandledException|GetSystemTime|QueryPerformance|GetTickCount|DebugBreak)/i, label: 'Diagnostics & Time' },
 ];
 
 function categorizeApi(name: string, _dll: string) {

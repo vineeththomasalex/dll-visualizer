@@ -11,24 +11,30 @@ export interface Instruction {
   /** Resolved symbolic target for a call/jump, when we can name it. */
   target?: number;
   targetName?: string;
+  /** True when the target is a direct code address we can jump to. */
+  followable?: boolean;
 }
 
-type CapstoneModule = {
-  Capstone: new (arch: number, mode: number) => {
-    disasm: (
-      data: Uint8Array,
-      options?: { address?: number | bigint; count?: number },
-    ) => { address: number | bigint; size: number; bytes: Uint8Array; mnemonic: string; opStr: string }[];
-    close: () => void;
-  };
-  loadCapstone: (args?: Record<string, unknown>) => Promise<void>;
-  ARCH: number;
-  MODE: number;
+type CapstoneCtor = new (
+  arch: number,
+  mode: number,
+) => {
+  disasm: (
+    data: Uint8Array,
+    options?: { address?: number | bigint; count?: number },
+  ) => { address: number | bigint; size: number; bytes: Uint8Array; mnemonic: string; opStr: string }[];
+  close: () => void;
 };
 
-let modulePromise: Promise<CapstoneModule> | null = null;
+interface Loaded {
+  Capstone: CapstoneCtor;
+  arch: number;
+  mode: number;
+}
 
-async function loadModule(is64: boolean, machine: number): Promise<CapstoneModule> {
+let modulePromise: Promise<{ Capstone: CapstoneCtor; Const: Record<string, number> }> | null = null;
+
+async function loadModule(is64: boolean, machine: number): Promise<Loaded> {
   if (!modulePromise) {
     modulePromise = (async () => {
       const cs = await import('capstone-wasm');
@@ -36,20 +42,22 @@ async function loadModule(is64: boolean, machine: number): Promise<CapstoneModul
       // default `new URL('capstone.wasm', import.meta.url)` resolution works
       // under any base path.
       await cs.loadCapstone();
-      return cs as unknown as CapstoneModule;
+      return cs as unknown as { Capstone: CapstoneCtor; Const: Record<string, number> };
     })();
   }
-  const mod = (await modulePromise) as unknown as Record<string, number> & CapstoneModule;
-  const arch = machine === 0xaa64 ? mod.CS_ARCH_ARM64 : machine === 0x1c0 || machine === 0x1c4 ? mod.CS_ARCH_ARM : mod.CS_ARCH_X86;
-  const mode =
-    machine === 0xaa64
-      ? mod.CS_MODE_LITTLE_ENDIAN
-      : machine === 0x1c0 || machine === 0x1c4
-        ? mod.CS_MODE_THUMB
-        : is64
-          ? mod.CS_MODE_64
-          : mod.CS_MODE_32;
-  return { ...(mod as unknown as CapstoneModule), ARCH: arch, MODE: mode };
+  const mod = await modulePromise;
+  const C = mod.Const;
+  const isArm64 = machine === 0xaa64;
+  const isArm32 = machine === 0x1c0 || machine === 0x1c4;
+  const arch = isArm64 ? C.CS_ARCH_ARM64 : isArm32 ? C.CS_ARCH_ARM : C.CS_ARCH_X86;
+  const mode = isArm64
+    ? C.CS_MODE_LITTLE_ENDIAN
+    : isArm32
+      ? C.CS_MODE_THUMB
+      : is64
+        ? C.CS_MODE_64
+        : C.CS_MODE_32;
+  return { Capstone: mod.Capstone, arch, mode };
 }
 
 export function isArchSupported(machine: number) {
@@ -93,7 +101,7 @@ export async function disassemble(
   if (len <= 0) return [];
   const data = pe.bytes.subarray(section.rawPointer + delta, section.rawPointer + delta + len);
 
-  const cs = new mod.Capstone(mod.ARCH, mod.MODE);
+  const cs = new mod.Capstone(mod.arch, mod.mode);
   try {
     const insns = cs.disasm(data, { address: startRva });
     return insns.map((i) => {
@@ -102,9 +110,11 @@ export async function disassemble(
       const group = classify(mnemonic);
       let target: number | undefined;
       let targetName: string | undefined;
+      let followable = false;
       if ((group === 'call' || group === 'flow') && /^0x[0-9a-f]+$/i.test(i.opStr.trim())) {
         target = parseInt(i.opStr.trim(), 16);
         targetName = nameLookup?.(target);
+        followable = true;
       }
       // rip-relative indirect call through the IAT: "qword ptr [rip + 0x1234]"
       const ripRel = /\[rip \+ (0x[0-9a-f]+)\]/i.exec(i.opStr);
@@ -123,6 +133,7 @@ export async function disassemble(
         group,
         target,
         targetName,
+        followable,
       };
     });
   } finally {

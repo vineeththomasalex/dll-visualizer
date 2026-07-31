@@ -91,7 +91,9 @@ export function DisasmView({ pe, symbols }: { pe: PEImage; symbols: Symbol[] }) 
   return (
     <div style={{ display: 'flex', gap: 16, height: '100%', minHeight: 0 }}>
       <div style={{ flex: '0 0 300px', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <Search value={q} onChange={setQ} placeholder="Find a function…" />
+        <div style={{ flex: '0 0 auto' }}>
+          <Search value={q} onChange={setQ} placeholder="Find a function…" />
+        </div>
         <div
           style={{
             marginTop: 10,
@@ -191,7 +193,20 @@ export function DisasmView({ pe, symbols }: { pe: PEImage; symbols: Symbol[] }) 
                     </span>
                     <span className="m">{i.mnemonic}</span>
                     <span className="o">
-                      {i.opStr}
+                      {i.followable && i.target !== undefined ? (
+                        <button
+                          style={{ color: 'var(--accent)', padding: 0, font: 'inherit' }}
+                          title="Follow this branch"
+                          onClick={() => {
+                            setTarget(i.target!);
+                            void run(i.target!, size);
+                          }}
+                        >
+                          {i.opStr}
+                        </button>
+                      ) : (
+                        i.opStr
+                      )}
                       {i.targetName && <em> ; {i.targetName}</em>}
                     </span>
                   </div>
