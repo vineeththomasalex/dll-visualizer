@@ -8,3 +8,4 @@ playwright-report
 *.log
 .vscode/*
 !.vscode/extensions.json
+tests/fixtures/
